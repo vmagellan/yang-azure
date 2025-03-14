@@ -6,19 +6,24 @@ on:
       - main
     paths:
       - 'backend/**'
+      - '.github/workflows/backend-deploy.yml'
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    name: Build and Deploy Backend
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
       
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
+        cache: 'pip'
         
     - name: Install dependencies
       run: |
@@ -43,7 +48,6 @@ jobs:
           az webapp config appsettings set --name yang2-api --resource-group yang2 --settings \
           AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
           AZURE_OPENAI_ENDPOINT="https://yang2-openai.openai.azure.com/" \
-          AZURE_OPENAI_API_VERSION="2024-10-21" \
           AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o-mini"
         
     - name: Deploy to Azure App Service
@@ -51,4 +55,11 @@ jobs:
       with:
         app-name: 'yang2-api'
         publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_BACKEND }}
-        package: './backend-deployment.zip' 
+        package: './backend-deployment.zip'
+        
+    - name: Verify deployment
+      run: |
+        echo "Wait for 30 seconds for deployment to complete..."
+        sleep 30
+        echo "Checking deployment status..."
+        curl -s https://yang2-api.azurewebsites.net/ || echo "Service not yet responding. It may take some time for the deployment to complete." 
