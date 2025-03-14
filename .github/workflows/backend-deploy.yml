@@ -25,10 +25,15 @@ jobs:
         cd backend
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+    
+    - name: Create deployment package
+      run: |
+        cd backend
+        zip -r ../backend-deployment.zip .
         
     - name: Deploy to Azure App Service
       uses: azure/webapps-deploy@v2
       with:
         app-name: 'yang2-api'
         publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_BACKEND }}
-        package: './backend' 
+        package: './backend-deployment.zip' 
