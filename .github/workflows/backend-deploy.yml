@@ -30,6 +30,18 @@ jobs:
       run: |
         cd backend
         zip -r ../backend-deployment.zip .
+    
+    - name: Set up Azure App Settings
+      uses: azure/CLI@v1
+      with:
+        inlineScript: |
+          az webapp config appsettings set --name yang2-api --resource-group yang2 --settings \
+          AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
+          AZURE_OPENAI_ENDPOINT="https://yang2-openai.openai.azure.com/" \
+          AZURE_OPENAI_API_VERSION="2024-10-21" \
+          AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o-mini"
+      env:
+        AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
         
     - name: Deploy to Azure App Service
       uses: azure/webapps-deploy@v2
