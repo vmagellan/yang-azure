@@ -51,7 +51,7 @@ async def process_prompt(request: PromptRequest, client: AzureOpenAI = Depends(g
         response = client.chat.completions.create(
             model=deployment_name,
             messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": "You are a helpful and knowledgeable AI assistant. Provide clear, concise, and accurate responses to user questions."},
                 {"role": "user", "content": request.prompt}
             ],
             temperature=0.7,
