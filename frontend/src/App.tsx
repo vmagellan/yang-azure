@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import './App.css'
 
-// API URL
-const API_URL = 'http://localhost:8000/api/prompt';
+// API URL - Updated to point to Azure backend
+const API_URL = 'https://yang2-api.azurewebsites.net/api/prompt';
 
 function App() {
   const [prompt, setPrompt] = useState('')
