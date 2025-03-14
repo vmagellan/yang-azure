@@ -6,7 +6,7 @@ gunicorn==21.2.0
 requests==2.31.0
 
 # Azure OpenAI - Support both approaches
-azure-ai-inference>=1.0.0
+azure-ai-inference>=1.0.0b9
 azure-identity>=1.15.0
 
 # Utils
