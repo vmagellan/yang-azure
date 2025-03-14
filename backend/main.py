@@ -9,7 +9,7 @@ app = FastAPI(title="Random Response API")
 # Configure CORS to allow requests from the frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],  # Frontend URLs
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "https://jolly-stone-0b1f54d03.6.azurestaticapps.net", "*"],  # Frontend URLs including Azure
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
