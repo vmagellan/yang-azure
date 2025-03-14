@@ -51,14 +51,14 @@ function App() {
 
   return (
     <div className="app-container">
-      <h1>AI Prompt Interface</h1>
+      <h1>Azure OpenAI Assistant</h1>
       
       <div className="input-container">
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Enter your prompt here..."
+          placeholder="Ask the AI assistant anything..."
           rows={4}
           className="prompt-input"
           aria-label="Prompt input"
@@ -70,7 +70,7 @@ function App() {
           className="submit-button"
           aria-label="Submit prompt"
         >
-          {loading ? 'Processing...' : 'Submit'}
+          {loading ? 'Thinking...' : 'Ask AI'}
         </button>
       </div>
 
@@ -82,14 +82,16 @@ function App() {
 
       {submitted && (
         <div className="response-container">
-          <h2>Response:</h2>
+          <h2>AI Response:</h2>
           <div className="response-content">
             {loading ? (
-              <p>Waiting for response...</p>
+              <p>Generating response, please wait...</p>
             ) : (
-              response.split('\n').map((line, index) => (
-                <p key={index}>{line}</p>
-              ))
+              <div className="ai-response">
+                {response.split('\n').map((line, index) => (
+                  line.trim() ? <p key={index}>{line}</p> : <br key={index} />
+                ))}
+              </div>
             )}
           </div>
         </div>

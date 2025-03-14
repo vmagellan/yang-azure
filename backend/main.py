@@ -1,10 +1,15 @@
-import random
-from fastapi import FastAPI, HTTPException
+import os
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from openai import AzureOpenAI
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Initialize FastAPI app
-app = FastAPI(title="Random Response API")
+app = FastAPI(title="Azure OpenAI API")
 
 # Configure CORS to allow requests from the frontend
 app.add_middleware(
@@ -15,46 +20,54 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize Azure OpenAI client
+def get_openai_client():
+    client = AzureOpenAI(
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),  
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+    )
+    return client
+
 # Define request model
 class PromptRequest(BaseModel):
     prompt: str
 
-# Array of possible responses
-responses = [
-    "That's an interesting question! Let me think about it...",
-    "I've considered your prompt carefully. Here's my answer.",
-    "Based on my knowledge, I would say...",
-    "That's a great prompt! Here's what I think.",
-    "I've analyzed your question and have the following thoughts.",
-    "Interesting perspective! Here's my response.",
-    "Let me offer a different viewpoint on that.",
-    "I've processed your prompt and here's what I can tell you.",
-    "After careful consideration, my response is...",
-    "Thank you for your prompt. Here's my answer."
-]
-
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Random Response API"}
+    return {"message": "Welcome to the Azure OpenAI API"}
 
 @app.post("/api/prompt")
-async def process_prompt(request: PromptRequest):
+async def process_prompt(request: PromptRequest, client: AzureOpenAI = Depends(get_openai_client)):
     try:
         # Validate the input
         if not request.prompt.strip():
             raise HTTPException(status_code=400, detail="Prompt cannot be empty")
         
-        # Select a random response
-        response = random.choice(responses)
+        # Create a completion with Azure OpenAI
+        deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
         
-        # Personalize the response with the prompt
-        personalized_response = f"Response to: '{request.prompt}'\n\n{response}"
+        # Call Azure OpenAI service
+        response = client.chat.completions.create(
+            model=deployment_name,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": request.prompt}
+            ],
+            temperature=0.7,
+            max_tokens=800
+        )
+        
+        # Extract response content
+        response_content = response.choices[0].message.content
         
         return {
-            "response": personalized_response,
+            "response": response_content,
             "status": "success"
         }
     except Exception as e:
+        # Log the exception for debugging
+        print(f"Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # For debugging purposes
