@@ -31,6 +31,11 @@ jobs:
         cd backend
         zip -r ../backend-deployment.zip .
     
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
     - name: Set up Azure App Settings
       uses: azure/CLI@v1
       with:
@@ -40,8 +45,6 @@ jobs:
           AZURE_OPENAI_ENDPOINT="https://yang2-openai.openai.azure.com/" \
           AZURE_OPENAI_API_VERSION="2024-10-21" \
           AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o-mini"
-      env:
-        AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
         
     - name: Deploy to Azure App Service
       uses: azure/webapps-deploy@v2
