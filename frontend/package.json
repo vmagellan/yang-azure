@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm install --legacy-peer-deps && tsc -b && vite build",
+    "build": "tsc -b && vite build && cp staticwebapp.config.json dist/",
+    "build:ci": "npm install --legacy-peer-deps && NODE_ENV=production tsc -b && NODE_ENV=production vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
+    "@types/node": "^22.13.10",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.3.4",

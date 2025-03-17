@@ -1,6 +1,18 @@
 {
   "routes": [
     {
+      "route": "/assets/*.js",
+      "headers": {
+        "content-type": "application/javascript"
+      }
+    },
+    {
+      "route": "/*.js",
+      "headers": {
+        "content-type": "application/javascript" 
+      }
+    },
+    {
       "route": "/*",
       "serve": "/index.html",
       "statusCode": 200
@@ -8,11 +20,19 @@
   ],
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/assets/*"]
+    "exclude": ["/assets/*", "/*.js", "/*.css"]
   },
   "mimeTypes": {
     ".js": "application/javascript",
+    ".mjs": "application/javascript",
     ".css": "text/css",
-    ".html": "text/html"
+    ".html": "text/html",
+    ".json": "application/json"
+  },
+  "responseOverrides": {
+    "404": {
+      "rewrite": "/index.html",
+      "statusCode": 200
+    }
   }
 } 
