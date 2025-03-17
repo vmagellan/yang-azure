@@ -1,36 +1,6 @@
 {
   "routes": [
     {
-      "route": "/assets/*.js",
-      "headers": {
-        "content-type": "application/javascript"
-      }
-    },
-    {
-      "route": "/*.js",
-      "headers": {
-        "content-type": "application/javascript"
-      }
-    },
-    {
-      "route": "/assets/*.css",
-      "headers": {
-        "content-type": "text/css"
-      }
-    },
-    {
-      "route": "/*.css",
-      "headers": {
-        "content-type": "text/css"
-      }
-    },
-    {
-      "route": "/assets/*.json",
-      "headers": {
-        "content-type": "application/json"
-      }
-    },
-    {
       "route": "/*",
       "serve": "/index.html",
       "statusCode": 200
@@ -38,22 +8,11 @@
   ],
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/images/*.{png,jpg,gif}", "/css/*", "/assets/*"]
+    "exclude": ["/assets/*"]
   },
   "mimeTypes": {
     ".js": "application/javascript",
-    ".mjs": "application/javascript",
     ".css": "text/css",
-    ".html": "text/html",
-    ".json": "application/json",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".svg": "image/svg+xml"
-  },
-  "responseOverrides": {
-    "404": {
-      "rewrite": "/index.html",
-      "statusCode": 200
-    }
+    ".html": "text/html"
   }
 } 
