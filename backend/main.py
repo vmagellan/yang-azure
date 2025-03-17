@@ -2,9 +2,12 @@ import os
 import traceback
 import requests
 import json
-from typing import Dict, Any, Optional
-from fastapi import FastAPI, HTTPException, Depends
+from typing import Dict, Any, Optional, List
+from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2AuthorizationCodeBearer, HTTPBearer, HTTPAuthorizationCredentials
+from jose import jwt, JWTError
+from jose.exceptions import JOSEError
 from pydantic import BaseModel
 
 # Try to import Azure AI Inference SDK, with graceful fallback for linting environments
@@ -58,6 +61,11 @@ REQUIRED_ENV_VARS = [
     "AZURE_OPENAI_DEPLOYMENT_NAME"
 ]
 
+# Microsoft Entra ID configuration
+AZURE_TENANT_ID = os.getenv("AZURE_TENANT_ID", "85786e75-baa3-495f-9103-20fe6fb996d4")
+AZURE_CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "dced1b9b-2699-4e98-a951-92cbbe629bd2")
+JWKS_URI = f"https://login.microsoftonline.com/{AZURE_TENANT_ID}/discovery/v2.0/keys"
+
 missing_vars = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
 if missing_vars:
     print("=" * 80)
@@ -89,10 +97,89 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize security scheme
+security = HTTPBearer(auto_error=False)
+
 # Define request model
 class PromptRequest(BaseModel):
     """Model for the prompt request."""
     prompt: str
+
+# Function to validate JWT token
+async def validate_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[Dict[str, Any]]:
+    """
+    Validate the JWT token from Microsoft Entra ID.
+    
+    Args:
+        credentials: The HTTP authorization credentials
+        
+    Returns:
+        Optional[Dict[str, Any]]: The decoded token payload if valid, None if no token provided
+        
+    Raises:
+        HTTPException: If the token is invalid
+    """
+    if credentials is None:
+        # No token provided, authentication is optional
+        return None
+    
+    token = credentials.credentials
+    
+    try:
+        # Fetch the JWKS (JSON Web Key Set) from Microsoft
+        jwks_response = requests.get(JWKS_URI)
+        if not jwks_response.ok:
+            print(f"Failed to fetch JWKS: {jwks_response.status_code} - {jwks_response.text}")
+            return None
+            
+        jwks = jwks_response.json()
+        
+        # Get the token header to extract the key ID (kid)
+        token_header = jwt.get_unverified_header(token)
+        
+        # Find the matching key in the JWKS
+        rsa_key = {}
+        for key in jwks.get("keys", []):
+            if key.get("kid") == token_header.get("kid"):
+                rsa_key = {
+                    "kty": key.get("kty"),
+                    "kid": key.get("kid"),
+                    "use": key.get("use"),
+                    "n": key.get("n"),
+                    "e": key.get("e")
+                }
+        
+        if not rsa_key:
+            print(f"No matching key found for kid: {token_header.get('kid')}")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token: Key ID not found"
+            )
+        
+        # Verify the token
+        payload = jwt.decode(
+            token,
+            rsa_key,
+            algorithms=["RS256"],
+            audience=AZURE_CLIENT_ID,
+            issuer=f"https://login.microsoftonline.com/{AZURE_TENANT_ID}/v2.0"
+        )
+        
+        return payload
+        
+    except JWTError as e:
+        print(f"JWT validation error: {str(e)}")
+        raise HTTPException(
+            status_code=401,
+            detail=f"Invalid token: {str(e)}"
+        )
+    except Exception as e:
+        print(f"Unexpected error during token validation: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication failed"
+        )
 
 @app.get("/")
 def read_root() -> Dict[str, str]:
@@ -154,13 +241,15 @@ def call_openai_direct(prompt: str) -> str:
 
 @app.post("/api/prompt")
 async def process_prompt(
-    request: PromptRequest
+    request: PromptRequest,
+    user_info: Optional[Dict[str, Any]] = Depends(validate_token)
 ) -> Dict[str, str]:
     """
     Process a prompt and return a response from Azure OpenAI.
     
     Args:
         request: The prompt request containing the user's prompt
+        user_info: The authenticated user information (optional)
         
     Returns:
         Dict[str, str]: The response from Azure OpenAI and a status
@@ -168,6 +257,13 @@ async def process_prompt(
     Raises:
         HTTPException: If the prompt is empty or an error occurs
     """
+    # Log user information if authenticated
+    if user_info:
+        user_name = user_info.get("name", user_info.get("preferred_username", "Unknown user"))
+        print(f"Request from authenticated user: {user_name}")
+    else:
+        print("Request from unauthenticated user")
+    
     try:
         # Validate the input
         if not request.prompt.strip():
@@ -271,7 +367,9 @@ async def process_prompt(
 
 # Debug endpoint to verify configuration
 @app.get("/api/debug")
-async def debug_config() -> Dict[str, Any]:
+async def debug_config(
+    user_info: Optional[Dict[str, Any]] = Depends(validate_token)
+) -> Dict[str, Any]:
     """
     Debug endpoint to verify Azure OpenAI configuration.
     
@@ -297,6 +395,19 @@ async def debug_config() -> Dict[str, Any]:
     except Exception as e:
         print(f"Direct API test failed: {str(e)}")
     
+    auth_info = {}
+    if user_info:
+        auth_info = {
+            "authenticated": True,
+            "username": user_info.get("name", user_info.get("preferred_username", "Unknown")),
+            "tenant_id": AZURE_TENANT_ID,
+            "client_id": AZURE_CLIENT_ID,
+        }
+    else:
+        auth_info = {
+            "authenticated": False
+        }
+    
     return {
         "status": "missing_env_vars" if missing_list else "ok",
         "missing_vars": missing_list,
@@ -306,7 +417,8 @@ async def debug_config() -> Dict[str, Any]:
         "cors_origins": allowed_origins,
         "azure_sdk_version": AZURE_SDK_VERSION,
         "azure_sdk_available": AZURE_SDK_AVAILABLE,
-        "direct_api_working": direct_api_working
+        "direct_api_working": direct_api_working,
+        "auth": auth_info
     }
 
 # For debugging purposes
