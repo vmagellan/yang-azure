@@ -1,39 +1,56 @@
 # Deployment Guide
 
-This document outlines the deployment process for both the frontend and backend components of the application.
+This document outlines the CLI-based deployment process for both the frontend and backend components of the application.
 
-## Frontend Deployment
+## Prerequisites
 
-The frontend is automatically deployed via GitHub Actions whenever changes are pushed to the `main` branch that affect the frontend code.
-
-### How it Works
-
-1. The GitHub Actions workflow is defined in `.github/workflows/azure-static-web-apps-jolly-stone-0b1f54d03.yml`
-2. When code is pushed to the `main` branch, the workflow automatically builds and deploys the frontend to Azure Static Web Apps
-3. The deployment is accessible at: https://jolly-stone-0b1f54d03.6.azurestaticapps.net
-
-### Manual Trigger
-
-If you need to manually trigger a deployment:
-
-1. Make your changes to the frontend code
-2. Commit and push to the main branch:
-   ```
-   git add frontend/
-   git commit -m "Your commit message"
-   git push
-   ```
-
-## Backend Deployment
-
-The backend is deployed manually using the Azure CLI. This approach was chosen because it's more reliable than the GitHub Actions workflow for the backend.
-
-### Prerequisites
-
-- Azure CLI installed and logged in
+- Azure CLI installed and logged in (`az login`)
+- Node.js and npm installed
 - Access to the Azure subscription
+- Static Web Apps deployment token (available in the Azure Portal)
 
-### Deployment Steps
+## Unified Deployment Script
+
+A unified deployment script `deploy.sh` has been created to streamline the deployment process for both frontend and backend components.
+
+### How to Use the Deployment Script
+
+1. Make the script executable (first time only):
+   ```bash
+   chmod +x deploy.sh
+   ```
+
+2. Run the script:
+   ```bash
+   ./deploy.sh
+   ```
+
+3. The script will present a menu with the following options:
+   - Deploy Backend Only
+   - Deploy Frontend Only
+   - Deploy Both (Backend first, then Frontend)
+   - Exit
+
+4. When prompted, enter your Static Web Apps deployment token.
+   - You can find this token in the Azure Portal under your Static Web App → Overview → Manage deployment token
+
+### What the Script Does
+
+#### Backend Deployment
+1. Creates a clean deployment package excluding unnecessary files
+2. Deploys the package to Azure App Service using the Azure CLI
+3. Tests the API to verify the deployment
+
+#### Frontend Deployment
+1. Builds the frontend application
+2. Deploys the built files to Azure Static Web Apps using the Static Web Apps CLI
+3. Configures the correct MIME types and routing rules
+
+## Manual Deployment (Alternative)
+
+If you prefer to run the deployment steps manually, you can follow these instructions:
+
+### Backend Manual Deployment
 
 1. **Create a deployment package**:
    ```bash
@@ -46,20 +63,30 @@ The backend is deployed manually using the Azure CLI. This approach was chosen b
 
 2. **Deploy to Azure App Service**:
    ```bash
-   # Deploy the package using the newer az webapp deploy command
+   # Deploy the package using the Azure CLI
    az webapp deploy --resource-group yang2 --name yang2-api --src-path azure-backend-deployment.zip --type zip
    ```
 
-3. **Verify the deployment**:
+### Frontend Manual Deployment
+
+1. **Build the frontend**:
    ```bash
-   # Check if the API is responding
-   curl https://yang2-api.azurewebsites.net/
-   
-   # Test the API with a prompt
-   curl -s https://yang2-api.azurewebsites.net/api/prompt -H "Content-Type: application/json" -d '{"prompt":"What are popular tourist attractions in Paris?"}'
+   # Navigate to the frontend directory
+   cd frontend
+
+   # Build the application
+   npm run build
    ```
 
-### Environment Configuration
+2. **Deploy to Azure Static Web Apps**:
+   ```bash
+   # Deploy using the Static Web Apps CLI
+   npx @azure/static-web-apps-cli deploy dist --deployment-token YOUR_DEPLOYMENT_TOKEN --env production
+   ```
+
+## Environment Configuration
+
+### Backend Environment Variables
 
 The backend requires the following environment variables to be set in the Azure App Service:
 
@@ -67,12 +94,15 @@ The backend requires the following environment variables to be set in the Azure 
 - `AZURE_OPENAI_ENDPOINT`: Your Azure OpenAI endpoint (e.g., "https://yang2-openai.openai.azure.com/")
 - `AZURE_OPENAI_DEPLOYMENT_NAME`: The deployment name in Azure OpenAI (e.g., "gpt-4o-mini")
 
-These are set automatically during deployment, but you can also configure them manually in the Azure Portal:
-
+You can configure these in the Azure Portal:
 1. Go to the Azure Portal
 2. Navigate to your App Service (yang2-api)
 3. Go to Settings > Configuration
 4. Update the Application settings as needed
+
+### Frontend Environment Variables
+
+The frontend configuration is managed through the `.env.production` file.
 
 ## Troubleshooting
 
@@ -94,5 +124,10 @@ If the backend deployment fails:
 
 ### Frontend Deployment Issues
 
-1. Check the GitHub Actions workflow runs in your repository
-2. Verify that your environment variables in `.env.production` are correctly set 
+1. Make sure the Static Web Apps CLI is correctly installed:
+   ```bash
+   npm install -g @azure/static-web-apps-cli
+   ```
+
+2. Verify that your environment variables in `.env.production` are correctly set
+3. Check that your deployment token is valid and has not expired 

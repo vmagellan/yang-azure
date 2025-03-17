@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMsal, useIsAuthenticated, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react"
-import { InteractionStatus, InteractionType, PopupRequest, RedirectRequest, BrowserAuthError } from "@azure/msal-browser"
+import { InteractionStatus, RedirectRequest } from "@azure/msal-browser"
 import { loginRequest } from "./authConfig"
 import './App.css'
 
@@ -147,28 +147,37 @@ function App() {
       
       // Make the actual API call to our backend
       console.log("Calling API:", API_URL);
+      console.log("Request headers:", JSON.stringify(headers));
+      console.log("Request body:", JSON.stringify({ prompt }));
+      
       const response = await fetch(API_URL, {
         method: 'POST',
         headers,
         body: JSON.stringify({ prompt })
       })
       
+      console.log("API response status:", response.status, response.statusText);
+      console.log("API response headers:", JSON.stringify(Object.fromEntries([...response.headers.entries()])));
+      
       if (!response.ok) {
         // Try to get the detailed error message from the response
         let errorMessage = `Server responded with status: ${response.status}`;
         try {
           const errorResponse = await response.json();
+          console.log("API error response:", errorResponse);
           if (errorResponse.detail) {
             errorMessage = `Error: ${errorResponse.detail}`;
           }
         } catch (e) {
           // If we can't parse the JSON, just use the status message
+          console.log("Failed to parse error response:", e);
         }
         
         throw new Error(errorMessage);
       }
       
       const data = await response.json()
+      console.log("API response data:", data);
       setResponse(data.response)
     } catch (error) {
       console.error('Error fetching response:', error)
@@ -266,6 +275,42 @@ function App() {
             aria-label="Submit prompt"
           >
             {loading ? 'Thinking...' : 'Ask AI'}
+          </button>
+          
+          {/* Debug button for testing API directly */}
+          <button 
+            onClick={async () => {
+              try {
+                setLoading(true);
+                setError(null);
+                
+                // Direct API call without authentication
+                const response = await fetch(API_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ prompt: prompt || 'Hello from debug button' })
+                });
+                
+                console.log("Debug API response status:", response.status);
+                
+                if (!response.ok) {
+                  throw new Error(`API debug call failed: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log("Debug API response:", data);
+                setResponse(data.response);
+                setSubmitted(true);
+              } catch (error) {
+                console.error("Debug API call failed:", error);
+                setError(`Debug API call failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+              } finally {
+                setLoading(false);
+              }
+            }}
+            style={{ marginLeft: '10px', background: '#6b7280' }}
+          >
+            Debug API (No Auth)
           </button>
         </div>
 

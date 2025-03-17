@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && cp staticwebapp.config.json dist/",
-    "build:ci": "npm install --legacy-peer-deps && NODE_ENV=production tsc -b && NODE_ENV=production vite build",
+    "build": "tsc -b && vite build && cp staticwebapp.config.json dist/ && cp web.config dist/",
+    "build:ci": "npm install --legacy-peer-deps && NODE_ENV=production tsc -b && NODE_ENV=production vite build && cp staticwebapp.config.json dist/ && cp web.config dist/",
     "lint": "eslint .",
     "preview": "vite preview"
   },
