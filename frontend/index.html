@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Keep these but comment them out for now since they might be causing issues -->
-    <!-- <meta http-equiv="Content-Type" content="text/html; charset=utf-8" /> -->
-    <!-- <meta http-equiv="X-Content-Type-Options" content="nosniff" /> -->
+    <!-- Explicitly set MIME type headers -->
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval';">
     <title>AI Prompt Interface</title>
     <meta name="description" content="A simple interface to send prompts to an AI and get responses" />
     <meta name="theme-color" content="#646cff" />
@@ -16,6 +16,7 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <!-- Updated with explicit type and relative path (dot makes it relative) -->
+    <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>

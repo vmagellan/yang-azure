@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // Add explicit base path
+  base: './',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
@@ -16,6 +18,8 @@ export default defineConfig({
         assetFileNames: 'assets/[name].[hash].[ext]'
       }
     },
+    // Ensure all files are properly typed
+    target: 'esnext',
     // Add modulePreload settings for production only
     modulePreload: {
       polyfill: true,
@@ -35,5 +39,9 @@ export default defineConfig({
       // Set MIME types for local development as well
       'Content-Type': 'application/javascript; charset=utf-8',
     }
+  },
+  // Add explicit resolve config to ensure proper file resolution
+  resolve: {
+    extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json']
   }
 })
