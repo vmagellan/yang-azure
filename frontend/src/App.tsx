@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import './App.css'
 
-// API URL - Updated to point to Azure backend
-const API_URL = 'https://yang2-api.azurewebsites.net/api/prompt';
+// API URL from environment variables - automatically switches between local and production
+const API_URL = import.meta.env.VITE_API_URL || 'https://yang2-api.azurewebsites.net/api/prompt';
+console.log('Using API URL:', API_URL);
 
 function App() {
   const [prompt, setPrompt] = useState('')
@@ -28,15 +29,37 @@ function App() {
       })
       
       if (!response.ok) {
-        throw new Error(`Server responded with status: ${response.status}`)
+        // Try to get the detailed error message from the response
+        let errorMessage = `Server responded with status: ${response.status}`;
+        try {
+          const errorResponse = await response.json();
+          if (errorResponse.detail) {
+            errorMessage = `Error: ${errorResponse.detail}`;
+          }
+        } catch (e) {
+          // If we can't parse the JSON, just use the status message
+        }
+        
+        throw new Error(errorMessage);
       }
       
       const data = await response.json()
       setResponse(data.response)
     } catch (error) {
       console.error('Error fetching response:', error)
-      setError('Could not connect to the server. Please make sure the backend is running.')
-      setResponse('Error: Could not get a response. Please try again.')
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(errorMessage);
+      
+      // Check if API is working by calling the debug endpoint
+      try {
+        const debugResponse = await fetch(API_URL.replace('/prompt', '/debug'));
+        if (debugResponse.ok) {
+          const debugData = await debugResponse.json();
+          console.log('API debug information:', debugData);
+        }
+      } catch (debugError) {
+        console.error('Could not connect to debug endpoint:', debugError);
+      }
     } finally {
       setLoading(false)
     }
@@ -76,7 +99,12 @@ function App() {
 
       {error && (
         <div className="error-message">
-          {error}
+          <h3>Error:</h3>
+          <p>{error}</p>
+          <p className="error-help">
+            This might be due to missing or incorrect Azure OpenAI credentials.
+            Please check the backend logs for more details.
+          </p>
         </div>
       )}
 
