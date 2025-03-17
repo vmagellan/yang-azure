@@ -142,6 +142,7 @@ async def validate_token(credentials: Optional[HTTPAuthorizationCredentials] = D
             print("DEV MODE: Extracting token claims without full validation")
             unverified_claims = jwt.decode(
                 token, 
+                key="",  # Add empty key to fix linter error
                 options={"verify_signature": False, "verify_aud": False, "verify_iss": False}
             )
             
