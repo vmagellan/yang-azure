@@ -3,8 +3,8 @@
 
 export const msalConfig = {
   auth: {
-    clientId: "YOUR_CLIENT_ID", // Replace with your App Registration Client ID
-    authority: "https://login.microsoftonline.com/YOUR_TENANT_ID", // Replace with your Tenant ID
+    clientId: "dced1b9b-2699-4e98-a951-92cbbe629bd2", // Your App Registration Client ID
+    authority: "https://login.microsoftonline.com/85786e75-baa3-495f-9103-20fe6fb996d4", // Your Tenant ID
     redirectUri: window.location.origin, // Will use the current URL as redirect URL
   },
   cache: {
