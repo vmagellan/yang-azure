@@ -3,31 +3,31 @@
     {
       "route": "/assets/*.js",
       "headers": {
-        "Content-Type": "application/javascript"
+        "content-type": "application/javascript"
       }
     },
     {
       "route": "/*.js",
       "headers": {
-        "Content-Type": "application/javascript"
+        "content-type": "application/javascript"
       }
     },
     {
       "route": "/assets/*.css",
       "headers": {
-        "Content-Type": "text/css"
+        "content-type": "text/css"
       }
     },
     {
       "route": "/*.css",
       "headers": {
-        "Content-Type": "text/css"
+        "content-type": "text/css"
       }
     },
     {
       "route": "/assets/*.json",
       "headers": {
-        "Content-Type": "application/json"
+        "content-type": "application/json"
       }
     },
     {
@@ -42,9 +42,13 @@
   },
   "mimeTypes": {
     ".js": "application/javascript",
+    ".mjs": "application/javascript",
     ".css": "text/css",
     ".html": "text/html",
-    ".json": "application/json"
+    ".json": "application/json",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".svg": "image/svg+xml"
   },
   "responseOverrides": {
     "404": {

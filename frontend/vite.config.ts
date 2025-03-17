@@ -30,6 +30,10 @@ export default defineConfig({
   server: {
     port: 5173, // Standard port - if you're using 5174, you might want to change this
     // Allow localhost connection with HTTPS
-    https: false // Set to true if using HTTPS in local dev
+    https: false, // Set to true if using HTTPS in local dev
+    headers: {
+      // Set MIME types for local development as well
+      'Content-Type': 'application/javascript; charset=utf-8',
+    }
   }
 })
