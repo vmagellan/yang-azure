@@ -9,5 +9,8 @@ requests==2.31.0
 azure-ai-inference>=1.0.0b9
 azure-identity>=1.15.0
 
+# Authentication
+python-jose[cryptography]==3.3.0
+
 # Utils
 python-multipart==0.0.6 
