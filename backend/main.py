@@ -9,6 +9,7 @@ from fastapi.security import OAuth2AuthorizationCodeBearer, HTTPBearer, HTTPAuth
 from jose import jwt, JWTError
 from jose.exceptions import JOSEError
 from pydantic import BaseModel
+import sys
 
 # Try to import Azure AI Inference SDK, with graceful fallback for linting environments
 try:
@@ -53,6 +54,13 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()  # Ensure environment variables are loaded correctly
+
+# Development mode flag - more permissive authentication for local development
+DEV_MODE = os.getenv("DEV_MODE", "true").lower() == "true"
+if DEV_MODE:
+    print("=" * 80)
+    print("RUNNING IN DEVELOPMENT MODE - Authentication will be more permissive")
+    print("=" * 80)
 
 # Validate required environment variables
 REQUIRED_ENV_VARS = [
@@ -121,33 +129,100 @@ async def validate_token(credentials: Optional[HTTPAuthorizationCredentials] = D
     """
     if credentials is None:
         # No token provided, authentication is optional
+        print("No authentication token provided - proceeding without authentication")
         return None
     
     token = credentials.credentials
+    print(f"Token received: {token[:10]}...{token[-10:]} (length: {len(token)})")
+    
+    # In development mode, extract user info without full validation
+    if DEV_MODE:
+        try:
+            # Just decode without verification to extract claims
+            print("DEV MODE: Extracting token claims without full validation")
+            unverified_claims = jwt.decode(
+                token, 
+                options={"verify_signature": False, "verify_aud": False, "verify_iss": False}
+            )
+            
+            # Log the claims we found
+            print(f"DEV MODE: Extracted claims: {list(unverified_claims.keys())}")
+            
+            # Create a simplified user info object
+            return {
+                "name": unverified_claims.get("name", unverified_claims.get("preferred_username", "Dev User")),
+                "sub": unverified_claims.get("sub", "unknown"),
+                "oid": unverified_claims.get("oid", "unknown"),
+                "dev_mode": True
+            }
+        except Exception as e:
+            print(f"DEV MODE: Could not extract claims from token: {str(e)}")
+            print("DEV MODE: Proceeding with simple auth bypass")
+            # If even that fails, create a dummy user for dev mode
+            return {
+                "name": "Local Dev User",
+                "sub": "dev-user",
+                "dev_mode": True
+            }
+            
+    # Normal production validation below this point
+    print(f"Using AZURE_CLIENT_ID: {AZURE_CLIENT_ID}")
+    print(f"Using AZURE_TENANT_ID: {AZURE_TENANT_ID}")
     
     try:
         # Fetch the JWKS (JSON Web Key Set) from Microsoft
-        jwks_response = requests.get(JWKS_URI)
+        jwks_uri = f"https://login.microsoftonline.com/{AZURE_TENANT_ID}/discovery/v2.0/keys"
+        print(f"Fetching JWKS from: {jwks_uri}")
+        jwks_response = requests.get(jwks_uri)
         if not jwks_response.ok:
             print(f"Failed to fetch JWKS: {jwks_response.status_code} - {jwks_response.text}")
             return None
             
         jwks = jwks_response.json()
+        print(f"JWKS fetched successfully with {len(jwks.get('keys', []))} keys")
         
         # Get the token header to extract the key ID (kid)
         token_header = jwt.get_unverified_header(token)
+        print(f"Token header: {token_header}")
         
         # Find the matching key in the JWKS
         rsa_key = {}
         for key in jwks.get("keys", []):
             if key.get("kid") == token_header.get("kid"):
-                rsa_key = {
-                    "kty": key.get("kty"),
-                    "kid": key.get("kid"),
-                    "use": key.get("use"),
-                    "n": key.get("n"),
-                    "e": key.get("e")
-                }
+                print(f"Found matching key with kid: {key.get('kid')}")
+                # Instead of just extracting properties, use a proper RSA import format
+                import base64
+                import struct
+                from cryptography.hazmat.backends import default_backend
+                from cryptography.hazmat.primitives.asymmetric import rsa
+                from cryptography.hazmat.primitives import serialization
+                
+                # Function to decode base64 URL
+                def base64_to_long(data):
+                    data = data.replace('-', '+').replace('_', '/')
+                    # Fix padding
+                    missing_padding = len(data) % 4
+                    if missing_padding:
+                        data += '=' * (4 - missing_padding)
+                    return int.from_bytes(base64.b64decode(data), byteorder='big')
+                
+                # Get modulus and exponent
+                n = base64_to_long(key.get("n"))
+                e = base64_to_long(key.get("e"))
+                
+                # Create a proper RSA public key
+                public_numbers = rsa.RSAPublicNumbers(e=e, n=n)
+                public_key = public_numbers.public_key(default_backend())
+                
+                # Serialize to PEM format
+                pem = public_key.public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.PKCS1
+                )
+                
+                # Set the PEM-encoded key in rsa_key
+                rsa_key = pem.decode('utf-8')
+                break
         
         if not rsa_key:
             print(f"No matching key found for kid: {token_header.get('kid')}")
@@ -157,22 +232,31 @@ async def validate_token(credentials: Optional[HTTPAuthorizationCredentials] = D
             )
         
         # Verify the token
-        payload = jwt.decode(
-            token,
-            rsa_key,
-            algorithms=["RS256"],
-            audience=AZURE_CLIENT_ID,
-            issuer=f"https://login.microsoftonline.com/{AZURE_TENANT_ID}/v2.0"
-        )
+        expected_issuer = f"https://login.microsoftonline.com/{AZURE_TENANT_ID}/v2.0"
+        print(f"Verifying token with audience: {AZURE_CLIENT_ID}")
+        print(f"Verifying token with issuer: {expected_issuer}")
         
-        return payload
-        
-    except JWTError as e:
-        print(f"JWT validation error: {str(e)}")
-        raise HTTPException(
-            status_code=401,
-            detail=f"Invalid token: {str(e)}"
-        )
+        try:
+            # Use a different approach for verification
+            payload = jwt.decode(
+                token,
+                rsa_key,
+                algorithms=["RS256"],
+                audience=AZURE_CLIENT_ID,
+                issuer=expected_issuer,
+                options={"verify_signature": True}
+            )
+            
+            print(f"Token validation successful! Claims: {list(payload.keys())}")
+            return payload
+            
+        except JWTError as e:
+            print(f"JWT validation error: {str(e)}")
+            traceback.print_exc()  # Add traceback for more detailed debug info
+            raise HTTPException(
+                status_code=401,
+                detail=f"Invalid token: {str(e)}"
+            )
     except Exception as e:
         print(f"Unexpected error during token validation: {str(e)}")
         traceback.print_exc()

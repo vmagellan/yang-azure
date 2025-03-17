@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMsal, useIsAuthenticated, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react"
-import { InteractionStatus, InteractionType, PopupRequest, RedirectRequest } from "@azure/msal-browser"
+import { InteractionStatus, InteractionType, PopupRequest, RedirectRequest, BrowserAuthError } from "@azure/msal-browser"
 import { loginRequest } from "./authConfig"
 import './App.css'
 
@@ -8,8 +8,30 @@ import './App.css'
 const API_URL = import.meta.env.VITE_API_URL || 'https://yang2-api.azurewebsites.net/api/prompt';
 console.log('Using API URL:', API_URL);
 
+// Debug authentication state
+function getAuthDebugInfo(msal: any, isAuthenticated: boolean) {
+  try {
+    return {
+      isAuthenticated,
+      activeAccount: msal.instance.getActiveAccount() ? 
+        {
+          name: msal.instance.getActiveAccount()?.name,
+          username: msal.instance.getActiveAccount()?.username
+        } : null,
+      allAccounts: msal.instance.getAllAccounts().length,
+      inProgress: msal.inProgress
+    };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : 'Unknown error',
+      isAuthenticated
+    };
+  }
+}
+
 function App() {
-  const { instance, inProgress, accounts } = useMsal();
+  const msal = useMsal();
+  const { instance, inProgress, accounts } = msal;
   const isAuthenticated = useIsAuthenticated();
   const [prompt, setPrompt] = useState('')
   const [response, setResponse] = useState('')
@@ -18,6 +40,7 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
   const [authError, setAuthError] = useState<string | null>(null)
+  const [authDebug, setAuthDebug] = useState<any>(null)
 
   // Get user profile when authenticated
   useEffect(() => {
@@ -27,53 +50,47 @@ function App() {
     }
   }, [isAuthenticated, accounts]);
 
-  // Monitor auth status
+  // Log auth state on changes
   useEffect(() => {
-    console.log("Auth status:", {
-      isAuthenticated,
-      inProgress,
-      accounts: accounts.length,
-      accountNames: accounts.map(a => a.name || a.username)
-    });
-  }, [isAuthenticated, inProgress, accounts]);
+    const debugInfo = getAuthDebugInfo(msal, isAuthenticated);
+    console.log("Auth Debug Info:", debugInfo);
+    setAuthDebug(debugInfo);
+  }, [isAuthenticated, inProgress, accounts, msal]);
 
   const handleLogin = async () => {
     setAuthError(null);
     
     if (inProgress !== InteractionStatus.None) {
-      console.log('Authentication already in progress');
+      console.log('Authentication already in progress:', inProgress);
       return;
     }
     
     try {
-      // Try popup login first, fall back to redirect
-      try {
-        const loginPopupRequest: PopupRequest = {
-          ...loginRequest,
-          prompt: 'select_account'
-        };
-        
-        const response = await instance.loginPopup(loginPopupRequest);
-        console.log("Login successful:", response);
-        
-        if (response.account) {
-          setUserName(response.account.name || response.account.username || "Authenticated User");
-        }
-      } catch (popupError: any) {
-        console.log("Popup login failed, trying redirect:", popupError);
-        
-        // If popup fails, try redirect
-        const loginRedirectRequest: RedirectRequest = {
-          ...loginRequest,
-          prompt: 'select_account',
-          redirectStartPage: window.location.href
-        };
-        
-        await instance.loginRedirect(loginRedirectRequest);
-      }
+      console.log("Starting login process...");
+      
+      // Force SPA redirect authentication instead of trying popup first
+      const loginRedirectRequest: RedirectRequest = {
+        ...loginRequest,
+        prompt: 'select_account',
+        redirectStartPage: window.location.href
+      };
+      
+      console.log("Initiating redirect login with:", loginRedirectRequest);
+      await instance.loginRedirect(loginRedirectRequest);
     } catch (error: any) {
-      console.error("Login completely failed:", error);
-      setAuthError(`Login failed: ${error.message || 'Unknown error'}`);
+      console.error("Login failed:", error);
+      
+      let errorMessage = 'Login failed. ';
+      
+      // Add specific message for SPA configuration error
+      if (error.errorCode === "cross_origin_auth_error" || 
+          (error.message && error.message.includes("Cross-origin token redemption"))) {
+        errorMessage += "This appears to be an Azure AD configuration issue. " +
+          "The app registration must be configured as a Single-Page Application (SPA). ";
+      }
+      
+      errorMessage += error.message || 'Unknown error';
+      setAuthError(errorMessage);
     }
   };
 
@@ -97,6 +114,8 @@ function App() {
       
       if (isAuthenticated) {
         try {
+          console.log("Attempting to acquire token silently...");
+          
           // Get access token silently
           const tokenResponse = await instance.acquireTokenSilent({
             ...loginRequest,
@@ -111,9 +130,12 @@ function App() {
           
           // Fall back to interactive login if silent token acquisition fails
           try {
-            const tokenResponse = await instance.acquireTokenPopup(loginRequest);
-            headers['Authorization'] = `Bearer ${tokenResponse.accessToken}`;
-            console.log("Token acquired through popup");
+            console.log("Falling back to interactive token acquisition...");
+            // acquireTokenRedirect doesn't return a token directly - it triggers a redirect
+            // This won't actually reach the line below because of the redirect
+            await instance.acquireTokenRedirect(loginRequest);
+            // This code will not execute due to redirect
+            console.log("Redirect initiated for token acquisition");
           } catch (interactiveError) {
             console.error('Error during interactive login:', interactiveError);
             throw new Error('Authentication failed. Please try logging in again.');
@@ -213,6 +235,14 @@ function App() {
             {inProgress !== InteractionStatus.None && 
               <p>Authentication in progress: {inProgress}</p>
             }
+            
+            {/* Debug information - can be removed in production */}
+            {authDebug && (
+              <div className="auth-debug" style={{margin: '20px', padding: '10px', background: '#f5f5f5', textAlign: 'left'}}>
+                <h4>Authentication Debug Info:</h4>
+                <pre style={{overflow: 'auto'}}>{JSON.stringify(authDebug, null, 2)}</pre>
+              </div>
+            )}
           </div>
         </div>
       </UnauthenticatedTemplate>

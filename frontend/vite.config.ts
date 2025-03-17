@@ -16,11 +16,11 @@ export default defineConfig({
         assetFileNames: 'assets/[name].[hash].[ext]'
       }
     },
-    // Add modulePreload settings
+    // Add modulePreload settings for production only
     modulePreload: {
       polyfill: true,
     },
-    // Generate manifest
+    // Generate manifest for production
     manifest: true,
     // Improve code splitting
     cssCodeSplit: true,
@@ -28,12 +28,8 @@ export default defineConfig({
     sourcemap: true
   },
   server: {
-    port: 5173, // Ensure this matches the port in Entra ID configuration
+    port: 5173, // Standard port - if you're using 5174, you might want to change this
     // Allow localhost connection with HTTPS
-    https: false, // Set to true if using HTTPS in local dev
-    headers: {
-      'X-Content-Type-Options': 'nosniff',
-      'Content-Type': 'application/javascript; charset=utf-8'
-    }
+    https: false // Set to true if using HTTPS in local dev
   }
 })
