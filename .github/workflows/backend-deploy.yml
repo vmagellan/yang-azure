@@ -29,11 +29,54 @@ jobs:
       run: |
         cd backend
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        # First try installing with verbose to see any issues
+        pip install -r requirements.txt -v
+        # Check if installation succeeded
+        if [ $? -ne 0 ]; then
+          echo "Error installing dependencies. Will try alternative approach."
+          # Try installing packages one by one
+          while read requirement; do
+            if [[ -n "$requirement" && "$requirement" != \#* ]]; then
+              pip install $requirement || echo "Warning: Could not install $requirement"
+            fi
+          done < requirements.txt
+        fi
+        
+        # List installed packages for debugging
+        pip list
     
     - name: Create deployment package
       run: |
         cd backend
+        # Make sure startup.sh is executable
+        chmod +x startup.sh
+        # Create web.config for Azure App Service if it doesn't exist
+        if [ ! -f "web.config" ]; then
+          echo "Creating web.config for Azure App Service..."
+          cat > web.config << 'EOL'
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <system.webServer>
+    <handlers>
+      <add name="PythonHandler" path="*" verb="*" modules="httpPlatformHandler" resourceType="Unspecified"/>
+    </handlers>
+    <httpPlatform processPath="%home%\site\wwwroot\startup.sh"
+                  arguments=""
+                  stdoutLogEnabled="true"
+                  stdoutLogFile="%home%\LogFiles\stdout"
+                  startupTimeLimit="300">
+      <environmentVariables>
+        <environmentVariable name="PYTHONPATH" value="%home%\site\wwwroot"/>
+      </environmentVariables>
+    </httpPlatform>
+  </system.webServer>
+</configuration>
+EOL
+        fi
+        
+        # Create clean deployment package without __pycache__ and other unnecessary files
+        find . -type d -name "__pycache__" -exec rm -rf {} +
+        find . -type d -name "venv" -exec rm -rf {} +
         zip -r ../backend-deployment.zip .
     
     - name: Azure Login
@@ -45,10 +88,17 @@ jobs:
       uses: azure/CLI@v1
       with:
         inlineScript: |
+          echo "Setting Azure App Service configuration..."
+          # Set Python version
+          az webapp config set --name yang2-api --resource-group yang2 --python-version 3.9
+          
+          # Set environment variables
           az webapp config appsettings set --name yang2-api --resource-group yang2 --settings \
           AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
           AZURE_OPENAI_ENDPOINT="https://yang2-openai.openai.azure.com/" \
-          AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o-mini"
+          AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o-mini" \
+          SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+          WEBSITE_RUN_FROM_PACKAGE=0
         
     - name: Deploy to Azure App Service
       uses: azure/webapps-deploy@v2
@@ -59,7 +109,18 @@ jobs:
         
     - name: Verify deployment
       run: |
-        echo "Wait for 30 seconds for deployment to complete..."
-        sleep 30
+        echo "Wait for 60 seconds for deployment to complete..."
+        sleep 60
         echo "Checking deployment status..."
-        curl -s https://yang2-api.azurewebsites.net/ || echo "Service not yet responding. It may take some time for the deployment to complete." 
+        # Try multiple times with increasing delays
+        for i in 1 2 3 4 5; do
+          echo "Attempt $i to connect to the API..."
+          RESPONSE=$(curl -s https://yang2-api.azurewebsites.net/)
+          if [ $? -eq 0 ] && [ -n "$RESPONSE" ]; then
+            echo "API is responding! Response: $RESPONSE"
+            break
+          else
+            echo "API not yet responding. Waiting longer..."
+            sleep $((30 * i))  # Increase wait time with each attempt
+          fi
+        done 
