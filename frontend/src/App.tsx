@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMsal, useIsAuthenticated, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react"
+import { InteractionStatus, InteractionType, PopupRequest, RedirectRequest } from "@azure/msal-browser"
 import { loginRequest } from "./authConfig"
 import './App.css'
 
@@ -8,7 +9,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'https://yang2-api.azurewebsites
 console.log('Using API URL:', API_URL);
 
 function App() {
-  const { instance } = useMsal();
+  const { instance, inProgress, accounts } = useMsal();
   const isAuthenticated = useIsAuthenticated();
   const [prompt, setPrompt] = useState('')
   const [response, setResponse] = useState('')
@@ -16,34 +17,70 @@ function App() {
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   // Get user profile when authenticated
-  useState(() => {
-    if (isAuthenticated && instance.getActiveAccount()) {
-      const account = instance.getActiveAccount();
-      if (account) {
-        setUserName(account.name || account.username || "Authenticated User");
-      }
+  useEffect(() => {
+    if (isAuthenticated && accounts.length > 0) {
+      const account = accounts[0];
+      setUserName(account.name || account.username || "Authenticated User");
     }
-  });
+  }, [isAuthenticated, accounts]);
 
-  const handleLogin = () => {
-    instance.loginPopup(loginRequest)
-      .then(response => {
-        console.log("Login successful", response);
-        const account = response.account;
-        if (account) {
-          setUserName(account.name || account.username || "Authenticated User");
+  // Monitor auth status
+  useEffect(() => {
+    console.log("Auth status:", {
+      isAuthenticated,
+      inProgress,
+      accounts: accounts.length,
+      accountNames: accounts.map(a => a.name || a.username)
+    });
+  }, [isAuthenticated, inProgress, accounts]);
+
+  const handleLogin = async () => {
+    setAuthError(null);
+    
+    if (inProgress !== InteractionStatus.None) {
+      console.log('Authentication already in progress');
+      return;
+    }
+    
+    try {
+      // Try popup login first, fall back to redirect
+      try {
+        const loginPopupRequest: PopupRequest = {
+          ...loginRequest,
+          prompt: 'select_account'
+        };
+        
+        const response = await instance.loginPopup(loginPopupRequest);
+        console.log("Login successful:", response);
+        
+        if (response.account) {
+          setUserName(response.account.name || response.account.username || "Authenticated User");
         }
-      })
-      .catch(error => {
-        console.error("Login failed", error);
-        setError("Login failed. Please try again.");
-      });
+      } catch (popupError: any) {
+        console.log("Popup login failed, trying redirect:", popupError);
+        
+        // If popup fails, try redirect
+        const loginRedirectRequest: RedirectRequest = {
+          ...loginRequest,
+          prompt: 'select_account',
+          redirectStartPage: window.location.href
+        };
+        
+        await instance.loginRedirect(loginRedirectRequest);
+      }
+    } catch (error: any) {
+      console.error("Login completely failed:", error);
+      setAuthError(`Login failed: ${error.message || 'Unknown error'}`);
+    }
   };
 
   const handleLogout = () => {
-    instance.logout();
+    instance.logout({
+      postLogoutRedirectUri: window.location.origin
+    });
   };
 
   const handleSubmit = async () => {
@@ -63,25 +100,31 @@ function App() {
           // Get access token silently
           const tokenResponse = await instance.acquireTokenSilent({
             ...loginRequest,
-            account: instance.getActiveAccount() || undefined
+            account: accounts[0] || undefined
           });
           
           // Add the token to the headers
           headers['Authorization'] = `Bearer ${tokenResponse.accessToken}`;
+          console.log("Token acquired successfully");
         } catch (tokenError) {
-          console.error('Error acquiring token:', tokenError);
+          console.error('Error acquiring token silently:', tokenError);
+          
           // Fall back to interactive login if silent token acquisition fails
           try {
             const tokenResponse = await instance.acquireTokenPopup(loginRequest);
             headers['Authorization'] = `Bearer ${tokenResponse.accessToken}`;
+            console.log("Token acquired through popup");
           } catch (interactiveError) {
             console.error('Error during interactive login:', interactiveError);
             throw new Error('Authentication failed. Please try logging in again.');
           }
         }
+      } else {
+        console.log("User not authenticated, proceeding without token");
       }
       
       // Make the actual API call to our backend
+      console.log("Calling API:", API_URL);
       const response = await fetch(API_URL, {
         method: 'POST',
         headers,
@@ -150,9 +193,27 @@ function App() {
         <div className="login-container">
           <h2>Please sign in to use the application</h2>
           <p>Authentication is required to access the AI assistant.</p>
-          <button onClick={handleLogin} className="login-button">
-            Sign In with Microsoft
+          
+          {authError && (
+            <div className="auth-error">
+              <p>{authError}</p>
+              <p>Please try again or contact support.</p>
+            </div>
+          )}
+          
+          <button 
+            onClick={handleLogin} 
+            className="login-button"
+            disabled={inProgress !== InteractionStatus.None}
+          >
+            {inProgress !== InteractionStatus.None ? 'Signing in...' : 'Sign In with Microsoft'}
           </button>
+          
+          <div className="login-status">
+            {inProgress !== InteractionStatus.None && 
+              <p>Authentication in progress: {inProgress}</p>
+            }
+          </div>
         </div>
       </UnauthenticatedTemplate>
 
